@@ -1,57 +1,43 @@
 %% FigS4.m
-% Reproduces published Figure S4 panels A-F (CA1 place-cell sparsity and
-% field coherence, Training vs Test, all-cells only) from the curated
-% source-data workbook only.
-%   A-C : sparsity     (CTRL / LCA3 / RCA3)
-%   D-F : field coherence (CTRL / LCA3 / RCA3)
+% Figure S4, panels A-D: normalized session change in locomotion, (Test - Training)/(Test + Training).
+%   A-B  behavioral cohort; C-D  electrophysiology cohort.
+% Each dot is one mouse; squares and error bars are mean +/- SEM. No panel carries a significance mark: the
+% repeated-measures ANOVA across conditions (Statistics sheet) is not significant in any panel.
 %
-% Input : manuscript/source_data/FigS4_source_data.xlsx
-% Output: manuscript/figures_repro/FigS4_A-F.png
-%%
+% Input : ../source_data/FigS4_source_data_20261105.xlsx
+% Output: ../figures_repro/FigS4_A-D.{png,pdf,fig}
 
-set(0, 'DefaultAxesFontName', 'Arial');
-set(0, 'DefaultTextFontName', 'Arial');
-set(0, 'DefaultUicontrolFontName', 'Arial');
+sheets = {'TravelDistance_behavioral', 'MeanSpeed_behavioral', 'TotalDistance_ephys', 'MeanSpeed_ephys'};
+titles = {'Total Travel Distance', 'Moving Speed', 'Total Travel Distance', 'Moving Speed'};
+dash   = char(8212);
+ylabs  = {['Total Distance (m) ' dash ' Normalized'], ['Mean Speed (cm/s) ' dash ' Normalized']};
+yticks = {-0.4:0.2:0.8, -0.4:0.2:0.8, -0.4:0.1:0.4, -0.4:0.1:0.3};
+treat  = {'CTRL', 'LCA3', 'RCA3'};
+xlabs  = {'Control', 'LCA3 inhibition', 'RCA3 inhibition'};
+colX = [80 440]; rowY = [490 110]; axW = 225.75; axH = 269.25;
 
-scriptDir = fileparts(mfilename('fullpath'));
-srcPath   = fullfile(scriptDir, '..', 'source_data', 'FigS4_source_data.xlsx');
-outDir    = fullfile(scriptDir, '..', 'figures_repro');
-if ~exist(outDir, 'dir'), mkdir(outDir); end
+src = fullfile(fileparts(mfilename('fullpath')), '..', 'source_data', 'FigS4_source_data_20261105.xlsx');
 
-treatDisp = {'CTRL', 'LCA3', 'RCA3'};
-treatLbl  = {'Control', 'Left CA3 inhibition', 'Right CA3 inhibition'};
-
-rows = {
-    'Sparsity',       {'A', 'B', 'C'}, 'Sparsity';
-    'FieldCoherence', {'D', 'E', 'F'}, 'Field Coherence (z)';
-};
-
-fig = figure('Position', [60 40 1080 900], 'Color', 'w', 'Name', 'Figure S4 A-F');
-sgtitle('Figure S4  --  Place-cell sparsity (A-C) and field coherence (D-F), Training vs Test', ...
-    'FontName', 'Arial', 'FontSize', 12, 'FontWeight', 'bold');
-
-colX = [0.08 0.39 0.70]; wp = 0.27;
-rowY = [0.56 0.10]; hp = 0.36;
-for r = 1:size(rows, 1)
-    T = readtable(srcPath, 'Sheet', rows{r, 1});
-    panelLet = rows{r, 2};
-    yAll = [T.Training; T.Test];
-    yLim = [min(yAll) - range(yAll) * 0.06, max(yAll) + range(yAll) * 0.16];
-    for t = 1:3
-        axes('Position', [colX(t), rowY(r), wp, hp]); %#ok<LAXES>
-        mask = strcmp(T.Treatment, treatDisp{t});
-        train = T.Training(mask); test = T.Test(mask);
-
-        opts = struct('panelLabel', panelLet{t}, 'groupLabel', treatLbl{t}, ...
-            'yLim', yLim, 'diffInset', false);
-        if t == 1
-            opts.yLabel = rows{r, 3};
-        end
-        plot_paired_box(train, test, opts);
+[fig, S] = new_figure('Figure S4 A-D', 750, 800);
+k = S.k;
+for i = 1:4
+    T = readtable(src, 'Sheet', sheets{i});
+    ax = panel_axes(fig, [colX(mod(i - 1, 2) + 1), rowY(ceil(i / 2)), axW, axH], char('A' + i - 1), 14, 0.5);
+    span = max(T.NormalizedDelta) - min(T.NormalizedDelta);
+    set(ax, 'XLim', [0.4 3.6], 'YLim', [min(T.NormalizedDelta) - 0.08 * span, max(T.NormalizedDelta) + 0.66 * span], ...
+        'YTick', yticks{i}, 'XTick', 1:3, 'XTickLabel', strcat('\color{black}', xlabs), 'XTickLabelRotation', -30);
+    for g = 1:3
+        d = T.NormalizedDelta(strcmp(T.Treatment, treat{g}));
+        rng(g * 7, 'twister');                         % jitter as printed: 0.09 SD
+        x = g + 0.09 * randn(numel(d), 1);
+        errorbar(ax, g, mean(d), std(d) / sqrt(numel(d)), 'k', 'LineWidth', 1.8 * k, 'CapSize', 10 * k, 'Tag', 'sem');
+        plot(ax, g, mean(d), 's', 'MarkerSize', 9 * k, 'MarkerFaceColor', S.cTreatDark(g, :), 'MarkerEdgeColor', 'none', 'Tag', 'mean');
+        scatter(ax, x, d, (7.21 * k)^2, S.cTreat(g, :), 'filled', 'MarkerFaceAlpha', 0.75, 'MarkerEdgeColor', 'none', ...
+            'Tag', sprintf('pts%d', g));
     end
+    plot(ax, [0.4 3.6], [0 0], '--', 'Color', [0.4 0.4 0.4], 'LineWidth', 0.9 * k, 'Tag', 'zeroLine');
+    ylabel(ax, {ylabs{mod(i - 1, 2) + 1}, '(Test-Training)/(Test+Training)'}, 'FontName', S.font, 'FontWeight', 'bold', 'FontSize', 14 * k, 'Color', S.axcol);
+    text(ax, 0.5, 1.03, titles{i}, 'Units', 'normalized', 'FontName', S.font, 'FontWeight', 'bold', 'FontSize', 16 * k, ...
+        'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'Tag', 'panelTitle');
 end
-
-outPath = fullfile(outDir, 'FigS4_A-F.png');
-saveas(fig, outPath);
-close(fig);
-fprintf('Saved %s\n', outPath);
+save_figure(fig, 'FigS4_A-D');

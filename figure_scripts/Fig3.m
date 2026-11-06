@@ -1,50 +1,51 @@
 %% Fig3.m
-% Reproduces published Figure 3 panels A-I (Z-scored CA1 LFP band power,
-% Training vs Test) from the curated source-data workbook only. Mean+/-SEM
-% + thin individual-mouse-line style, matching the published panel style.
+% Figure 3, panels A-I: z-scored CA1 LFP band power in the Training and Test sessions (N = 7 mice per group).
+% Thin grey lines: individual mice. Thick black line: mean +/- SEM. Marks from the Statistics sheet
+% (two-tailed paired t-test); as in the figure, only significant panels carry a mark.
 %
-% Input : manuscript/source_data/Fig3_source_data.xlsx
-% Output: manuscript/figures_repro/Fig3_A-I.png
-%%
+% Input : ../source_data/Fig3_source_data_20261105.xlsx
+% Output: ../figures_repro/Fig3_A-I.{png,pdf,fig}
 
-set(0, 'DefaultAxesFontName', 'Arial');
-set(0, 'DefaultTextFontName', 'Arial');
-set(0, 'DefaultUicontrolFontName', 'Arial');
+bands  = {'theta', 'low_gamma', 'high_gamma'};
+ylabs  = {'Theta Z-Score', 'Low Gamma Z-Score', 'High Gamma Z-Score'};
+treat  = {'CTRL', 'LCA3', 'RCA3'};
+cond   = {'Control', 'Left CA3 inhibition', 'Right CA3 inhibition'};
+ylims  = {[0 1.4], [0 1.4], [0 1.4]; [-1.2 0], [-1.2 0], [-1.2 0]; [-1 0], [-1.2 0], [-1.2 0]};   % as printed
+barY   = [NaN NaN NaN; -0.214 NaN -0.203; -0.211 NaN -0.200];                                     % as printed
+colX = [80 420 760]; rowY = [505 275 40]; axW = 251.25; axH = 189.75;
 
-scriptDir = fileparts(mfilename('fullpath'));
-srcPath   = fullfile(scriptDir, '..', 'source_data', 'Fig3_source_data.xlsx');
-outDir    = fullfile(scriptDir, '..', 'figures_repro');
-if ~exist(outDir, 'dir'), mkdir(outDir); end
+src = fullfile(fileparts(mfilename('fullpath')), '..', 'source_data', 'Fig3_source_data_20261105.xlsx');
+T  = readtable(src, 'Sheet', 'BandPower');
+St = readtable(src, 'Sheet', 'Statistics', 'VariableNamingRule', 'preserve');
 
-T = readtable(srcPath, 'Sheet', 'BandPower');
-
-bands     = {'theta', 'low_gamma', 'high_gamma'};
-bandLbl   = {'Theta', 'Low-gamma', 'High-gamma'};
-treatDisp = {'CTRL', 'LCA3', 'RCA3'};
-treatLbl  = {'Control', 'Left CA3 inhibition', 'Right CA3 inhibition'};
-panelLet  = {'A', 'B', 'C'; 'D', 'E', 'F'; 'G', 'H', 'I'};
-
-yAll = [T.Training_z; T.Test_z];
-yLim = [min(yAll) - range(yAll) * 0.08, max(yAll) + range(yAll) * 0.10];
-
-fig = figure('Position', [60 40 1080 1000], 'Color', 'w', 'Name', 'Figure 3 A-I');
+[fig, S] = new_figure('Figure 3 A-I', 1040, 745);
+st = struct('sigX', [1 2], 'sigLW', 2, 'sigCol', S.axcol, 'sigFS', 18, 'nsFS', 14, 'sigDY', -1.5, 'nsDY', 4.4);
 for b = 1:3
     for t = 1:3
-        subplot(3, 3, (b - 1) * 3 + t);
-        mask = strcmp(T.Band, bands{b}) & strcmp(T.Treatment, treatDisp{t});
-        train = T.Training_z(mask); test = T.Test_z(mask);
-
-        opts = struct('panelLabel', panelLet{b, t}, 'groupLabel', treatLbl{t}, 'yLim', yLim);
-        if t == 1
-            opts.yLabel = {bandLbl{b}, 'Z-score'};
+        letter = char('A' + 3 * (b - 1) + t - 1);
+        sel = strcmp(T.Band, bands{b}) & strcmp(T.Treatment, treat{t});
+        ax = panel_axes(fig, [colX(t), rowY(b), axW, axH], letter, 14, 0.5);
+        set(ax, 'XLim', [0.5 2.5], 'YLim', ylims{b, t}, 'YTick', ylims{b, t}(1):0.2:ylims{b, t}(2), 'XTick', [1 2], ...
+            'XTickLabel', {'\color{black}Training', '\color{black}Test'}, 'XGrid', 'on', 'YGrid', 'on', 'GridAlpha', 0.15);
+        plot_mouse_lines(ax, T.Training_z(sel), T.Test_z(sel), S);
+        mark = significance_mark(St.("p (as in the figure)")(strcmp(St.panel, letter)));
+        if ~strcmp(mark, 'n.s.'), add_significance(ax, barY(b, t), mark, st); end
+        ylabel(ax, ylabs{b}, 'FontName', S.font, 'FontWeight', 'bold', 'FontSize', 14 * S.k, 'Color', S.axcol);
+        if b == 1
+            text(ax, 0.5, 1.05, cond{t}, 'Units', 'normalized', 'FontName', S.font, 'FontWeight', 'bold', ...
+                'FontSize', 16 * S.k, 'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'Tag', 'panelTitle');
         end
-        plot_meanSEM_lines(train, test, opts);
     end
 end
-sgtitle('Figure 3  --  Z-scored CA1 LFP band power, Training vs Test', ...
-    'FontName', 'Arial', 'FontSize', 12, 'FontWeight', 'bold');
+save_figure(fig, 'Fig3_A-I');
 
-outPath = fullfile(outDir, 'Fig3_A-I.png');
-saveas(fig, outPath);
-close(fig);
-fprintf('Saved %s\n', outPath);
+function plot_mouse_lines(ax, tr, te, S)
+k = S.k; n = numel(tr);
+for i = 1:n
+    plot(ax, [1 2], [tr(i) te(i)], '-', 'Color', [0.702 0.702 0.702], 'LineWidth', k, 'Tag', 'mouse');
+end
+scatter(ax, ones(n, 1), tr, (3.54 * k)^2, [0.219 0.258 1], 'filled', 'MarkerFaceAlpha', 0.3, 'MarkerEdgeColor', 'none', 'Tag', 'ptsTrain');
+scatter(ax, 2 * ones(n, 1), te, (3.54 * k)^2, [1 0 0], 'filled', 'MarkerFaceAlpha', 0.3, 'MarkerEdgeColor', 'none', 'Tag', 'ptsTest');
+errorbar(ax, [1 2], [mean(tr) mean(te)], [std(tr) std(te)] / sqrt(n), 'k', 'LineWidth', 2 * k, 'CapSize', 6 * k, ...
+    'Marker', 'o', 'MarkerSize', 4 * k, 'MarkerFaceColor', 'k', 'Tag', 'meanSEM');
+end

@@ -1,114 +1,65 @@
-function plot_paired_box(train, test, opts)
-%PLOT_PAIRED_BOX  House-style paired Training/Test panel.
-% Box+scatter+paired-line style (Fig1_discrimination_index_stats.m /
-% Fig2_SI_animal_averaged.m plotBoxPanel). Draws into the CURRENT axes
-% (caller sets up the subplot/axes position first).
-%
-%   plot_paired_box(train, test, opts)
-%
-% opts fields (all optional):
-%   panelLabel  - e.g. '2B'
-%   groupLabel  - e.g. 'Left CA3 inhibition'
-%   yLabel      - y-axis label (only drawn if provided)
-%   yLim        - [lo hi], shared axis range set by the caller
-%   statsLine   - pre-formatted stats string for the title, e.g.
-%                 't(69)=-1.59, d=0.65, n=70' (no p-value; house style)
-%   diffInset   - true/false, adds a small inset of (Test-Training) per
-%                 unit + mean line (off by default; opt in per caller)
+function plot_paired_box(ax, tr, te, P)
+%PLOT_PAIRED_BOX  One panel: Training and Test box plots with every value as a point (Fig 1, 2, 6, S7).
+% tr, te  paired values, one per unit (equal length)
+% P       a box style of repro_style, plus
+%         ylim, ytick, ylabel, title, sig (the mark), seed and jitSD (horizontal jitter of the points)
+%         lineCol, lineLW         lines joining each unit's two points, when P.pairLines is true
+%         barY                    height of the significance bar; when absent, P.barDown points below the axes top
+%                                 or 3 pt above the highest point drawn, whichever is higher
+%         omit                    logical, units not drawn: they stay in the box and the mean of the inset
+%         inset                   struct with ylim, ytick, label: adds the Test - Training inset
+S = repro_style(); k = S.k;
+tr = tr(:); te = te(:); n = numel(tr); d = te - tr;
+if ~isfield(P, 'omit'), P.omit = false(n, 1); end
+drawn = ~P.omit(:);
 
-    train = train(:); test = test(:);
-    n = numel(train);
+set(ax, 'Box', P.box, 'XLim', P.xlim, 'YLim', P.ylim, 'YTick', P.ytick, 'XTick', [1 2], ...
+    'XTickLabel', {'\color{black}Training', '\color{black}Test'});
 
-    boxplot([train, test], 'Labels', {'Training', 'Test'});
-    hold on;
+% the same generator and order as the printed panels: Training, Test, inset
+rng(P.seed, 'twister');
+xTr = 1 + P.jitSD * randn(n, 1);
+xTe = 2 + P.jitSD * randn(n, 1);
 
-    rng(42);
-    xTr = 1 + randn(n, 1) * 0.06;
-    xTe = 2 + randn(n, 1) * 0.06;
-    for i = 1:n
-        plot([xTr(i) xTe(i)], [train(i) test(i)], '-', ...
-            'LineWidth', 0.5, 'Color', [0.4 0.4 0.4]);
-    end
-    scatter(xTr, train, 50, 'b', 'filled', 'MarkerFaceAlpha', 0.8, 'MarkerEdgeColor', 'none');
-    scatter(xTe, test,  50, 'r', 'filled', 'MarkerFaceAlpha', 0.8, 'MarkerEdgeColor', 'none');
-
-    if isfield(opts, 'yLabel') && ~isempty(opts.yLabel)
-        ylabel(opts.yLabel, 'FontSize', 9, 'FontWeight', 'bold');
-    end
-
-    titleLines = {};
-    top = strtrim(sprintf('%s %s', getopt(opts, 'panelLabel', ''), getopt(opts, 'groupLabel', '')));
-    if ~isempty(top)
-        titleLines{end+1} = sprintf('%s (n=%d)', top, n); %#ok<AGROW>
-    end
-    if isfield(opts, 'statsLine') && ~isempty(opts.statsLine)
-        titleLines{end+1} = opts.statsLine; %#ok<AGROW>
-    end
-    if ~isempty(titleLines)
-        title(titleLines, 'FontSize', 8.5);
-    end
-
-    xlim([0.5, 2.5]);
-    if isfield(opts, 'yLim') && ~isempty(opts.yLim)
-        ylim(opts.yLim);
-    end
-    axis square; box off;
-
-    if isfield(opts, 'diffInset') && opts.diffInset
-        addDiffInset(train, test);
-    end
-
-    hold off;
-end
-
-function addDiffInset(train, test)
-% Small inset: per-unit Test-Training difference + mean line.
-    n = numel(train);
-    d = test - train;
-
-    parentAx = gca;
-    parentPos = get(parentAx, 'Position');
-    % Cap the inset's absolute height (not just a fraction of the parent) so
-    % it doesn't grow large enough to crowd the panel title on tall panels,
-    % and leave a wider top margin than a pure 34%-of-height inset would.
-    insetW = min(parentPos(3) * 0.34, 0.09);
-    insetH = min(parentPos(4) * 0.30, 0.07);
-    topGap = 0.03;
-    insetPos = [parentPos(1) + parentPos(3) - insetW - 0.005, ...
-                parentPos(2) + parentPos(4) - insetH - topGap, ...
-                insetW, insetH];
-
-    axInset = axes('Position', insetPos);
-    hold(axInset, 'on');
-    rng(43);
-    xJit = 1 + (rand(n, 1) - 0.5) * 0.5;
-    scatter(axInset, xJit, d, 10, [0.35 0.35 0.35], 'filled', 'MarkerFaceAlpha', 0.6);
-    plot(axInset, [0.7 1.3], [mean(d) mean(d)], '-', 'Color', [0.85 0.20 0.20], 'LineWidth', 1.4);
-    yline(axInset, 0, 'k:', 'LineWidth', 0.5);
-    set(axInset, 'XTick', [], 'FontSize', 6, 'Box', 'on', 'Tag', 'diffInset');
-    ylabel(axInset, '\Delta', 'FontSize', 7);
-    hold(axInset, 'off');
-    uistack(axInset, 'top');  % boxplot() otherwise leaves it behind the main axes
-    % A later panel's main axes (created after this one) still lands on top
-    % of this inset in z-order even though they don't overlap spatially in
-    % most renderers' compositing -- restack ALL tagged insets in front
-    % right away so each one stays visible regardless of loop order.
-    restackInsets(ancestor(axInset, 'figure'));
-
-    axes(parentAx); %#ok<LAXES> restore current axes for the caller
-end
-
-function restackInsets(fig)
-    insetAxes = findall(fig, 'Type', 'axes', 'Tag', 'diffInset');
-    for i = 1:numel(insetAxes)
-        uistack(insetAxes(i), 'top');
+if P.pairLines
+    for i = find(drawn)'
+        plot(ax, [xTr(i) xTe(i)], [tr(i) te(i)], '-', 'Color', P.lineCol, 'LineWidth', P.lineLW * k, 'Tag', 'pair');
     end
 end
+draw_box(ax, 1, tr, P);
+draw_box(ax, 2, te, P);
+scatter(ax, xTr(drawn), tr(drawn), (P.ptD * k)^2, S.cTrain, 'filled', 'MarkerFaceAlpha', P.ptAlpha, ...
+    'MarkerEdgeColor', 'none', 'Tag', 'ptsTrain');
+scatter(ax, xTe(drawn), te(drawn), (P.ptD * k)^2, S.cTest, 'filled', 'MarkerFaceAlpha', P.ptAlpha, ...
+    'MarkerEdgeColor', 'none', 'Tag', 'ptsTest');
 
-function v = getopt(opts, field, default)
-    if isfield(opts, field) && ~isempty(opts.(field))
-        v = opts.(field);
-    else
-        v = default;
-    end
+if ~isfield(P, 'barY')
+    ppu = points_per_unit(ax);
+    P.barY = max(P.ylim(2) - P.barDown / ppu, max([tr(drawn); te(drawn)]) + 3 / ppu);
+end
+add_significance(ax, P.barY, P.sig, P);
+
+ylabel(ax, P.ylabel, 'FontName', S.font, 'FontWeight', 'bold', 'FontSize', P.ylabFS * k, 'Color', S.axcol);
+if isfield(P, 'inset')
+    xTitle = P.titleDX / P.axW;
+else
+    xTitle = 0.5;
+end
+text(ax, xTitle, 1.03, P.title, 'Units', 'normalized', 'FontName', S.font, 'FontWeight', 'bold', 'FontSize', P.titleFS * k, ...
+    'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'Color', 'k', 'Interpreter', 'none', 'Tag', 'panelTitle');
+
+if isfield(P, 'inset')
+    jIn = P.inJit * (2 * rand(n, 1) - 1);
+    fig = ancestor(ax, 'figure');
+    pos = ax.Position .* [fig.UserData.page fig.UserData.page];
+    ai = panel_axes(fig, [pos(1:2) + [P.inDX P.inDY], P.inW, P.inH], '', P.inTickFS, P.inLW);
+    ai.Tag = ['inset' ax.Tag(end)];
+    set(ai, 'Color', 'w', 'XLim', P.inXLim, 'YLim', P.inset.ylim, 'YTick', P.inset.ytick, 'XTick', 1, ...
+        'XTickLabel', {['\color{black}' P.inset.label]});
+    plot(ai, P.inXLim, [0 0], '--', 'Color', P.inZeroCol, 'LineWidth', P.inZeroLW * k, 'Tag', 'inZero');
+    scatter(ai, 1 + jIn(drawn), d(drawn), (P.inPtD * k)^2, [0 0 0], 'filled', 'MarkerFaceAlpha', P.inPtAlpha, ...
+        'MarkerEdgeColor', 'none', 'Tag', 'inPts');
+    plot(ai, [1 - P.inMeanHalf 1 + P.inMeanHalf], [mean(d) mean(d)], '-', 'Color', S.cTest, 'LineWidth', P.inMeanLW * k, ...
+        'Tag', 'inMean');
+end
 end
